@@ -1,19 +1,45 @@
-const siteInput = document.getElementById("siteInput");
-const addBtn = document.getElementById("addSiteBtn");
-const listContainer = document.getElementById("siteListContainer");
+const input = document.getElementById("siteInput");
+const addBtn = document.getElementById("addBtn");
+const siteListContainer = document.getElementById("siteList");
 
-// Siteyi ekrana liste olarak ekle
-function renderSite(site) {
-  const item = document.createElement("div");
-  item.textContent = site;
-  listContainer.appendChild(item);
+let sites = [];
+
+// Sayfa açıldığında kayıtlı siteleri yükle
+chrome.storage.sync.get("customSites", (data) => {
+  sites = data.customSites || [];
+  renderSites();
+});
+
+function renderSites() {
+  siteListContainer.innerHTML = "";
+  sites.forEach((site, index) => {
+    const div = document.createElement("div");
+    div.className = "site-item";
+
+    const span = document.createElement("span");
+    span.textContent = site;
+
+    const removeBtn = document.createElement("button");
+    removeBtn.textContent = "❌";
+    removeBtn.className = "remove-btn";
+    removeBtn.addEventListener("click", () => {
+      sites.splice(index, 1);
+      chrome.storage.sync.set({ customSites: sites }, renderSites);
+    });
+
+    div.appendChild(span);
+    div.appendChild(removeBtn);
+    siteListContainer.appendChild(div);
+  });
 }
 
-// + butonuna tıklandığında çalışacak
 addBtn.addEventListener("click", () => {
-  const site = siteInput.value.trim();
-  if (site !== "") {
-    renderSite(site);   // ekrana yazdır
-    siteInput.value = ""; // kutuyu temizle
+  const site = input.value.trim();
+  if (site && !sites.includes(site)) {
+    sites.push(site);
+    chrome.storage.sync.set({ customSites: sites }, () => {
+      input.value = "";
+      renderSites();
+    });
   }
 });

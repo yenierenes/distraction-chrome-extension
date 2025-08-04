@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Görev - Dikkatini Topla</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f4f4f4;
+    }
+
+    #taskBox {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 0 30px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+
+    input {
+      font-size: 18px;
+      padding: 8px;
+      margin-top: 10px;
+      width: 100px;
+      text-align: center;
+    }
+
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    #submitBtn {
+      background-color: #4CAF50;
+      color: white;
+    }
+
+    #accessBtn {
+      background-color: gray;
+      color: white;
+      margin-top: 20px;
+      cursor: not-allowed;
+    }
+
+    #accessBtn.enabled {
+      background-color: #2196F3;
+      cursor: pointer;
+    }
+
+    #message {
+      margin-top: 10px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div id="taskBox">
+    <h2>Görev Zamanı!</h2>
+    <p><span id="num1"></span> + <span id="num2"></span> = ?</p>
+    <input type="number" id="answer" placeholder="Cevap">
+    <br>
+    <button id="submitBtn">Gönder</button>
+    <div id="message"></div>
+    <button id="accessBtn" disabled>Siteye Giriş</button>
+  </div>
+
+  <script>
+    const num1 = Math.floor(Math.random() * 90 + 10); // 10-99
+    const num2 = Math.floor(Math.random() * 90 + 10);
+    const result = num1 + num2;
+
+    document.getElementById("num1").textContent = num1;
+    document.getElementById("num2").textContent = num2;
+
+    const answerInput = document.getElementById("answer");
+    const submitBtn = document.getElementById("submitBtn");
+    const accessBtn = document.getElementById("accessBtn");
+    const message = document.getElementById("message");
+
+    submitBtn.addEventListener("click", () => {
+      const userAnswer = parseInt(answerInput.value);
+      if (userAnswer === result) {
+        message.textContent = "✅ Doğru! Şimdi siteye giriş yapabilirsin.";
+        accessBtn.disabled = false;
+        accessBtn.classList.add("enabled");
+        accessBtn.style.cursor = "pointer";
+
+        // 10dk izin zamanını sakla
+        const accessUntil = Date.now() + 10 * 60 * 1000;
+        chrome.storage.sync.set({ accessUntil });
+      } else {
+        message.textContent = "❌ Yanlış cevap, tekrar dene!";
+      }
+    });
+
+    accessBtn.addEventListener("click", () => {
+      chrome.runtime.sendMessage({ action: "grantAccess" });
+      window.close(); // Bu sekmeyi kapatır
+    });
+  </script>
+</body>
+</html>

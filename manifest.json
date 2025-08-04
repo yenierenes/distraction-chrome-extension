@@ -3,8 +3,16 @@
   "name": "Not-Distracted",
   "description": "Dikkat dağıtıcı sitelere erişmeden önce görev tamamlaman gerek!",
   "version": "1.0",
-  "permissions": ["storage", "tabs", "webNavigation", "scripting"],
-  "host_permissions": ["*://*/*"],
+  "permissions": [
+    "storage",
+    "tabs",
+    "webNavigation",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "options_page": "settings.html",
   "background": {
     "service_worker": "background.js"
   },
@@ -17,7 +25,10 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["videoAd.html", "level.html"],
+      "resources": [
+        "videoAd.html",
+        "blur.js"
+      ],
       "matches": ["<all_urls>"]
     }
   ]
