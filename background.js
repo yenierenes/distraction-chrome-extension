@@ -21,6 +21,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       // 2) LOCAL → Popup’taki sayaç buradan okuyor (hızlı, kota sorunu yok)
       chrome.storage.local.set({ accessUntil });
 
+      // 3) Alarm kur → accessUntil süresi dolunca otomatik blur geri gelecek
+      chrome.alarms.create('nd-clearAccess', { when: accessUntil });
+
       // (İsteğe bağlı) Badge ile göster:
       // chrome.action.setBadgeText({ text: 'ON' });
       // chrome.action.setBadgeBackgroundColor({ color: '#0b8' });
@@ -72,6 +75,40 @@ function handleBlurInjection(details) {
     }
   });
 }
+
+// Süre bittiğinde alarm tetiklenir → erişimi kapat ve açık sekmelere blur uygula
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== 'nd-clearAccess') return;
+
+  // accessUntil değerlerini temizle
+  await chrome.storage.sync.remove('accessUntil');
+  await chrome.storage.local.remove('accessUntil');
+
+  // (İsteğe bağlı) Badge temizle
+  chrome.action.setBadgeText({ text: '' });
+
+  // Ayarları al (aktif mi, hangi siteler engelli)
+  const { isActive = false, customSites = [] } = await chrome.storage.sync.get({ isActive: false, customSites: [] });
+  if (!isActive || !Array.isArray(customSites) || customSites.length === 0) return;
+
+  // Açık sekmeleri kontrol et ve dikkat dağıtan sitelere blur.js enjekte et
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach((tab) => {
+      let url;
+      try { url = new URL(tab.url || ''); } catch { return; }
+
+      const matched = customSites.some(site => site && url.hostname.includes(site));
+      if (!matched) return;
+
+      try {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['blur.js']
+        });
+      } catch (e) { /* injection hatasını sessiz geç */ }
+    });
+  });
+});
 
 // Sayfa tamamen yüklendiğinde çalışır
 chrome.webNavigation.onCompleted.addListener(handleBlurInjection);
