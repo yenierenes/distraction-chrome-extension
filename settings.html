@@ -59,6 +59,18 @@
 
   <div id="siteList"></div>
 
-  <script src="settings.js"></script>
+ <!-- Süre ayarı (EKLE) -->
+<div id="nd-duration" style="margin:12px 0; padding:10px; border:1px solid #eee; border-radius:8px;">
+  <label for="nd-minutes" style="display:block; margin-bottom:6px;">
+    Serbest erişim süresi (dakika):
+  </label>
+  <input id="nd-minutes" type="number" min="1" max="180" step="1" style="width:90px;">
+  <button id="nd-save-minutes" style="margin-left:8px;">Kaydet</button>
+  <span id="nd-saved" style="margin-left:8px; opacity:.7; font-size:12px;"></span>
+</div>
+
+<!-- (YOKSA EKLE) settings.js -->
+<script src="settings.js"></script>
+
 </body>
 </html>

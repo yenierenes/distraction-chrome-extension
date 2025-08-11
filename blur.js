@@ -97,29 +97,33 @@ if (!document.getElementById("nd-blur-overlay")) {
       </button>
     `;
 
-    const answerInput = modal.querySelector("#nd-answer");
-    const submitBtn = modal.querySelector("#nd-submit");
-    const accessBtn = modal.querySelector("#nd-access");
-    const msg = modal.querySelector("#nd-msg");
+const answerInput = modal.querySelector("#nd-answer");
+const submitBtn = modal.querySelector("#nd-submit");
+const accessBtn = modal.querySelector("#nd-access");
+const msg = modal.querySelector("#nd-msg");
 
-    submitBtn.addEventListener("click", () => {
-      const userAnswer = parseInt(answerInput.value);
-      if (userAnswer === correct) {
-        msg.textContent = "✅ Doğru cevap! 10 dakika siteye girebilirsin.";
-        accessBtn.disabled = false;
-        accessBtn.style.background = "#2196F3";
-        accessBtn.style.cursor = "pointer";
+submitBtn.addEventListener("click", () => {
+  const userAnswer = parseInt(answerInput.value);
+  if (userAnswer === correct) {
+    // Süreyi ayarlardan oku
+    chrome.storage.sync.get({ accessMinutes: 10 }, ({ accessMinutes }) => {
+      msg.textContent = `✅ Doğru cevap! ${accessMinutes} dakika siteye girebilirsin.`;
+      accessBtn.disabled = false;
+      accessBtn.style.background = "#2196F3";
+      accessBtn.style.cursor = "pointer";
 
-        chrome.runtime.sendMessage({ action: "grantAccess" });
-      } else {
-        msg.textContent = "❌ Yanlış cevap, tekrar dene.";
-      }
+      chrome.runtime.sendMessage({ action: "grantAccess" });
     });
+  } else {
+    msg.textContent = "❌ Yanlış cevap, tekrar dene.";
+  }
+});
 
-    accessBtn.addEventListener("click", () => {
-      // Blur ve modal'ı kaldır
-      document.getElementById("nd-blur-style")?.remove();
-      document.getElementById("nd-blur-overlay")?.remove();
-    });
+accessBtn.addEventListener("click", () => {
+  // Blur ve modal'ı kaldır
+  document.getElementById("nd-blur-style")?.remove();
+  document.getElementById("nd-blur-overlay")?.remove();
+});
+
   }
 }

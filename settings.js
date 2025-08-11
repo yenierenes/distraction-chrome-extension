@@ -2,6 +2,28 @@ const input = document.getElementById("siteInput");
 const addBtn = document.getElementById("addBtn");
 const siteListContainer = document.getElementById("siteList");
 
+// === SÜRE AYARI EKLEMESİ ===
+const minutesInput = document.getElementById('nd-minutes');
+const saveBtn = document.getElementById('nd-save-minutes');
+const savedMsg = document.getElementById('nd-saved');
+
+if (minutesInput && saveBtn) {
+  // Açılışta değeri yükle (varsayılan 10 dk)
+  chrome.storage.sync.get({ accessMinutes: 10 }, ({ accessMinutes }) => {
+    minutesInput.value = accessMinutes;
+  });
+
+  // Kaydet butonu
+  saveBtn.addEventListener('click', async () => {
+    const val = parseInt(minutesInput.value, 10);
+    const clamped = Number.isFinite(val) ? Math.min(180, Math.max(1, val)) : 10;
+    await chrome.storage.sync.set({ accessMinutes: clamped });
+    savedMsg.textContent = 'Kaydedildi';
+    setTimeout(() => (savedMsg.textContent = ''), 1500);
+  });
+}
+// === SÜRE AYARI EKLEMESİ SON ===
+
 let sites = [];
 
 // Sayfa açıldığında kayıtlı siteleri yükle

@@ -1,16 +1,36 @@
 let distractionLevel = 0;
 let accessUntil = null;
 
-// Erişim süresi dolmuş mu?
+// Erişim süresi dolmuş mu? (true = artık izin yok)
 function isAccessExpired() {
   return !accessUntil || Date.now() > accessUntil;
 }
 
-// Mesajları dinle (sadece 10dk izin artık)
+// Mesajları dinle (görev başarı → AYARDAKİ SÜRE kadar izin ver)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "grantAccess") {
-    accessUntil = Date.now() + 10 * 60 * 1000; // 10 dakika
-    chrome.storage.sync.set({ accessUntil });
+  if (request && request.action === "grantAccess") {
+    // Kullanıcının settings.html'de belirlediği dakika değerini oku (varsayılan 10 dk)
+    chrome.storage.sync.get({ accessMinutes: 10 }, ({ accessMinutes }) => {
+      
+      // accessUntil = şu an + (kullanıcı süresi * dakika cinsinden ms)
+      accessUntil = Date.now() + accessMinutes * 60 * 1000;
+
+      // 1) SYNC → Blur kontrolün buradan okuyor + cihazlar arası senkronize
+      chrome.storage.sync.set({ accessUntil });
+
+      // 2) LOCAL → Popup’taki sayaç buradan okuyor (hızlı, kota sorunu yok)
+      chrome.storage.local.set({ accessUntil });
+
+      // (İsteğe bağlı) Badge ile göster:
+      // chrome.action.setBadgeText({ text: 'ON' });
+      // chrome.action.setBadgeBackgroundColor({ color: '#0b8' });
+
+      // Gönderen tarafa "tamam" cevabı ver
+      if (typeof sendResponse === 'function') sendResponse({ ok: true });
+    });
+
+    // async sendResponse kullanılacağı için true döndür
+    return true;
   }
 });
 
@@ -20,11 +40,20 @@ function handleBlurInjection(details) {
     const isActive = data.isActive ?? false;
     const distractingSites = data.customSites || [];
     const now = Date.now();
+
+    // SYNC'ten okunan accessUntil
     accessUntil = data.accessUntil || 0;
 
     if (!isActive) return;
 
-    const url = new URL(details.url);
+    let url;
+    try {
+      url = new URL(details.url);
+    } catch (e) {
+      // Bazı özel URL’ler hata atabilir
+      return;
+    }
+
     const matched = distractingSites.some(site =>
       url.hostname.includes(site)
     );
@@ -47,5 +76,5 @@ function handleBlurInjection(details) {
 // Sayfa tamamen yüklendiğinde çalışır
 chrome.webNavigation.onCompleted.addListener(handleBlurInjection);
 
-// SPA geçişlerinde çalışır (örn. YouTube, Facebook içi tıklamalar)
+// SPA (tek sayfa uygulamaları) geçişlerinde çalışır
 chrome.webNavigation.onHistoryStateUpdated.addListener(handleBlurInjection);
