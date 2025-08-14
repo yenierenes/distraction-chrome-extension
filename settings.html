@@ -2,75 +2,62 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Ayarlar - Not Distracted</title>
+  <title id="nd-set-title">Settings - Not-Distracted</title>
   <style>
     body {
       font-family: sans-serif;
       padding: 20px;
       max-width: 400px;
+      position: relative;
     }
-
-    h2 {
-      margin-top: 0;
+    h2 { margin-top: 0; }
+    #lang-switch-settings {
+      position: absolute; top: 10px; right: 12px;
+      cursor: pointer; font-size: 12px; user-select: none;
     }
-
     #siteInput {
       width: 70%;
       padding: 5px;
       font-size: 14px;
     }
-
     #addBtn {
       padding: 6px 12px;
       font-size: 16px;
     }
-
-    #siteList {
-      margin-top: 20px;
-    }
-
+    #siteList { margin-top: 20px; }
     .site-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 6px 10px;
-      margin-bottom: 6px;
-      background-color: #f0f0f0;
-      border-radius: 6px;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 10px; margin-bottom: 6px;
+      background-color: #f0f0f0; border-radius: 6px;
     }
-
     .remove-btn {
-      background: none;
-      border: none;
-      color: red;
-      font-size: 16px;
-      cursor: pointer;
+      background: none; border: none; color: red;
+      font-size: 16px; cursor: pointer;
     }
-
-    .remove-btn:hover {
-      color: darkred;
-    }
+    .remove-btn:hover { color: darkred; }
   </style>
 </head>
 <body>
-  <h2>Dikkat Dağıtan Siteler</h2>
-  <input type="text" id="siteInput" placeholder="örnek: facebook.com">
+  <!-- Dil anahtarı -->
+  <div id="lang-switch-settings">🌐 EN</div>
+
+  <h2 id="nd-heading-sites">Distracting Sites</h2>
+
+  <input type="text" id="siteInput" placeholder="e.g. facebook.com">
   <button id="addBtn">+</button>
 
   <div id="siteList"></div>
 
- <!-- Süre ayarı (EKLE) -->
-<div id="nd-duration" style="margin:12px 0; padding:10px; border:1px solid #eee; border-radius:8px;">
-  <label for="nd-minutes" style="display:block; margin-bottom:6px;">
-    Serbest erişim süresi (dakika):
-  </label>
-  <input id="nd-minutes" type="number" min="1" max="180" step="1" style="width:90px;">
-  <button id="nd-save-minutes" style="margin-left:8px;">Kaydet</button>
-  <span id="nd-saved" style="margin-left:8px; opacity:.7; font-size:12px;"></span>
-</div>
+  <!-- Süre ayarı -->
+  <div id="nd-duration" style="margin:12px 0; padding:10px; border:1px solid #eee; border-radius:8px;">
+    <label for="nd-minutes" id="nd-duration-label" style="display:block; margin-bottom:6px;">
+      Free access duration (minutes):
+    </label>
+    <input id="nd-minutes" type="number" min="1" max="180" step="1" style="width:90px;">
+    <button id="nd-save-minutes" style="margin-left:8px;">Save</button>
+    <span id="nd-saved" style="margin-left:8px; opacity:.7; font-size:12px;"></span>
+  </div>
 
-<!-- (YOKSA EKLE) settings.js -->
-<script src="settings.js"></script>
-
+  <script src="settings.js"></script>
 </body>
 </html>

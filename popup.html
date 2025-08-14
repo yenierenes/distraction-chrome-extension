@@ -1,59 +1,68 @@
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <meta charset="UTF-8">
-    <title>Not-Distracted</title>
-    <link rel="stylesheet" href="popup.css">
-    </head>
-    <body>
-    <h3>Not-Distracted</h3>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Not-Distracted</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    /* Küçük bir header alanı: sağ üstte dil anahtarı */
+    .nd-header { position: relative; }
+    #lang-switch {
+      position: absolute; top: 8px; right: 8px;
+      cursor: pointer; font-size: 12px; user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="nd-header">
+    <h3 id="nd-title">Not-Distracted</h3>
+    <!-- Dil düğmesi: metni JS dolduracak (🌐 EN / 🌐 TR) -->
+    <div id="lang-switch">🌐 EN</div>
+  </div>
 
-    <div style="margin-bottom: 10px;">
-        <label class="switch">
-        <input type="checkbox" id="toggleSwitch">
-        <span class="slider round"></span>
-        </label>
-        <div id="statusText">Durum yükleniyor...</div>
-    </div>
+  <div style="margin-bottom: 10px;">
+    <label class="switch">
+      <input type="checkbox" id="toggleSwitch">
+      <span class="slider round"></span>
+    </label>
+    <div id="statusText">Durum yükleniyor...</div>
+  </div>
 
-    <button id="settingsBtn">Ayarları Aç</button>
+  <button id="settingsBtn">Ayarları Aç</button>
 
-
-    
-    <!-- Geri sayım kutusu -->
-    <div id="nd-timerBox" style="margin-top:10px; padding:10px; border:1px solid #eee; border-radius:8px;">
+  <!-- Geri sayım kutusu -->
+  <div id="nd-timerBox" style="margin-top:10px; padding:10px; border:1px solid #eee; border-radius:8px;">
     <div id="nd-timerStatus" style="font-size:12px; opacity:.8;">Serbest zaman bekleniyor…</div>
     <div id="nd-countdown" style="font-size:22px; font-weight:700;">--:--</div>
-    </div>
-
-    <!-- Günlük istatistik -->
-    <div id="nd-today" style="margin-top:8px; font-size:13px; opacity:.85;">
-    Bugün: <strong id="nd-today-count">0</strong> kere dikkatin dağıldı!
-    </div>
-
-   <!-- === ND: Canlı sayaç ve bugün toplam (GÜNCELLE) === -->
-<hr />
-
-<div id="nd-focus-box" style="display:flex; flex-direction:column; gap:6px">
-  <div style="font-weight:700;">Odak Süresi (Canlı)</div>
-  <div id="nd-live-counter" style="font-size:18px;">00:00</div>
-
-  <!-- Sadece bugün toplam buraya -->
-  <div id="nd-today-total" style="margin-top:6px;">Bugünkü Toplam: 00:00</div>
-
-  <button id="nd-stats-btn" style="margin-top:6px; padding:6px 10px; border-radius:8px;">
-    İstatistikler
-  </button>
-
-  <div id="nd-stats-panel" style="display:none; margin-top:8px;">
-    <div id="nd-stats-content" style="font-size:12px; opacity:.95;"></div>
   </div>
-</div>
 
+  <!-- Günlük istatistik -->
+  <div id="nd-today" style="margin-top:8px; font-size:13px; opacity:.85;">
+    <span id="nd-today-prefix">Bugün:</span>
+    <strong id="nd-today-count">0</strong>
+    <span id="nd-today-suffix">kere dikkatin dağıldı!</span>
+  </div>
 
-    <!-- Dış dosyadan JS yüklüyoruz (inline değil!) -->
-    <script src="popup.js" defer></script>
+  <!-- === ND: Canlı sayaç ve bugün toplam === -->
+  <hr />
 
+  <div id="nd-focus-box" style="display:flex; flex-direction:column; gap:6px">
+    <div id="nd-live-title" style="font-weight:700;">Odak Süresi (Canlı)</div>
+    <div id="nd-live-counter" style="font-size:18px;">00:00</div>
 
-    </body>
-    </html>
+    <!-- Sadece bugün toplam buraya -->
+    <div id="nd-today-total" style="margin-top:6px;">Bugünkü Toplam: 00:00</div>
+
+    <button id="nd-stats-btn" style="margin-top:6px; padding:6px 10px; border-radius:8px;">
+      İstatistikler
+    </button>
+
+    <div id="nd-stats-panel" style="display:none; margin-top:8px;">
+      <div id="nd-stats-content" style="font-size:12px; opacity:.95;"></div>
+    </div>
+  </div>
+
+  <!-- Dış dosyadan JS yüklüyoruz -->
+  <script src="popup.js" defer></script>
+</body>
+</html>

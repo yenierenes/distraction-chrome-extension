@@ -1,13 +1,127 @@
+/* --- DİL MIGRASYONU ve VARSAYILAN (EN) --- */
+// Eski 'language' varsa 'lang'e taşı; hiçbiri yoksa 'en' ata
+chrome.storage.sync.get(['lang', 'language'], (data) => {
+  if (!data.lang && data.language) {
+    chrome.storage.sync.set({ lang: data.language });
+  }
+  if (!data.lang && !data.language) {
+    chrome.storage.sync.set({ lang: 'en' });
+  }
+});
+
+/* ===================== I18N / Dil ===================== */
+const ND_I18N = {
+  tr: {
+    title: "Not-Distracted",
+    settings: "Ayarları Aç",
+    statusActive: "Odak kalkanı aktif",
+    statusInactive: "Uygulamayı aktif et",
+    waiting: "Serbest zaman bekleniyor…",
+    freeTime: "Serbest zaman bitimine kalan süre:",
+    ended: "Serbest zaman doldu.",
+    todayPrefix: "Bugün:",
+    todaySuffix: "kere dikkatin dağıldı!",
+    focusLiveTitle: "Odak Süresi (Canlı)",
+    todayTotalPrefix: "Bugünkü Toplam",
+    statsButton: "İstatistikler",
+    last7Days: "Son 7 Gün",
+    tableDay: "Gün",
+    tableDuration: "Süre",
+    thisWeek: "Bu Hafta",
+    thisMonth: "Bu Ay",
+    topDistractors: "En Çok Dikkatini Dağıtan",
+    todayLabel: "Bugün",
+    weekLabel: "Bu Hafta",
+    monthLabel: "Bu Ay",
+    none: "-"
+  },
+  en: {
+    title: "Not-Distracted",
+    settings: "Open Settings",
+    statusActive: "Focus shield active",
+    statusInactive: "Activate the extension",
+    waiting: "Waiting for free time…",
+    freeTime: "Time left for free access:",
+    ended: "Free time ended.",
+    todayPrefix: "Today:",
+    todaySuffix: "times distracted!",
+    focusLiveTitle: "Focus Time (Live)",
+    todayTotalPrefix: "Today's Total",
+    statsButton: "Statistics",
+    last7Days: "Last 7 Days",
+    tableDay: "Day",
+    tableDuration: "Duration",
+    thisWeek: "This Week",
+    thisMonth: "This Month",
+    topDistractors: "Top Distractors",
+    todayLabel: "Today",
+    weekLabel: "This Week",
+    monthLabel: "This Month",
+    none: "-"
+  }
+};
+let ndLang = "en"; // <- başlangıçta EN
+function t(key){ return (ND_I18N[ndLang] && ND_I18N[ndLang][key]) || key; }
+
+async function ndLoadLang(){
+  const { lang } = await chrome.storage.sync.get("lang");
+  if (lang === "tr" || lang === "en") {
+    ndLang = lang;
+  } else {
+    ndLang = "en";
+    await chrome.storage.sync.set({ lang: "en" });
+  }
+}
+async function ndToggleLang(){
+  const newLang = (ndLang === "tr") ? "en" : "tr";
+  await chrome.storage.sync.set({ lang: newLang });
+  ndLang = newLang;
+  applyLanguageToStatic();
+  document.dispatchEvent(new Event("nd-lang-changed"));
+}
+
+/* Statik metinleri güncelle (başlık, butonlar, etiketler) */
+function applyLanguageToStatic(){
+  const titleEl = document.getElementById("nd-title");
+  if (titleEl) titleEl.textContent = t("title");
+  document.title = t("title");
+
+  const langSwitch = document.getElementById("lang-switch");
+  if (langSwitch) langSwitch.textContent = (ndLang === "tr") ? "🌐 EN" : "🌐 TR";
+
+  const settingsBtn = document.getElementById("settingsBtn");
+  if (settingsBtn) settingsBtn.textContent = t("settings");
+
+  const liveTitle = document.getElementById("nd-live-title");
+  if (liveTitle) liveTitle.textContent = t("focusLiveTitle");
+
+  const todayPrefix = document.getElementById("nd-today-prefix");
+  if (todayPrefix) todayPrefix.textContent = t("todayPrefix");
+
+  const todaySuffix = document.getElementById("nd-today-suffix");
+  if (todaySuffix) todaySuffix.textContent = t("todaySuffix");
+
+  const statsBtn = document.getElementById("nd-stats-btn");
+  if (statsBtn) statsBtn.textContent = t("statsButton");
+}
+
+/* İlk yüklemede dili getir ve butona davranış bağla */
+document.addEventListener("DOMContentLoaded", async () => {
+  await ndLoadLang();
+  applyLanguageToStatic();
+  const langSwitch = document.getElementById("lang-switch");
+  if (langSwitch) {
+    langSwitch.addEventListener("click", ndToggleLang);
+  }
+});
+
+/* ===================== Toggle / Status ===================== */
 const toggleSwitch = document.getElementById("toggleSwitch");
 const statusText = document.getElementById("statusText");
 const settingsBtn = document.getElementById("settingsBtn");
 
 function updateStatusText(isActive) {
-  if (isActive) {
-    statusText.textContent = "Odak kalkanı aktif";
-  } else {
-    statusText.textContent = "Uygulamayı aktif et";
-  }
+  statusText.textContent = isActive ? t("statusActive") : t("statusInactive");
 }
 
 chrome.storage.sync.get("isActive", (data) => {
@@ -33,18 +147,16 @@ if (settingsBtn) {
   });
 }
 
-/* ===================== Geri Sayım (DOMContentLoaded) ===================== */
-/* Not: Bu bölüm, background grantAccess sonrası ayarlanan accessUntil değerini
-   popup'ta gösterir. Hem LOCAL hem SYNC depoyu kontrol eder;
-   biri boşsa diğerinden alır ve storage değişimini canlı dinler. */
+/* Dil değişince status metnini de yenile */
+document.addEventListener("nd-lang-changed", () => {
+  chrome.storage.sync.get("isActive", ({ isActive = false }) => updateStatusText(isActive));
+});
 
+/* ===================== Geri Sayım ===================== */
 document.addEventListener('DOMContentLoaded', () => {
   const statusEl = document.getElementById('nd-timerStatus');
   const countdownEl = document.getElementById('nd-countdown');
-  if (!statusEl || !countdownEl) {
-    // Sayaç HTML'i yoksa sessiz çık (UI eklemediysen sorun değil)
-    return;
-  }
+  if (!statusEl || !countdownEl) return;
 
   let ndIntervalId = null;
 
@@ -56,7 +168,6 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   async function readAccessUntil() {
-    // Önce local, yoksa sync — ikisini de dene
     let { accessUntil } = await chrome.storage.local.get('accessUntil');
     if (!accessUntil) {
       const syncData = await chrome.storage.sync.get('accessUntil');
@@ -71,18 +182,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const accessUntil = await readAccessUntil();
 
     if (!accessUntil || Date.now() >= accessUntil) {
-      statusEl.textContent = 'Serbest zaman bekleniyor…';
+      statusEl.textContent = t('waiting');
       countdownEl.textContent = '--:--';
       return;
     }
 
-    statusEl.textContent = 'Serbest zaman bitimine kalan süre:';
+    statusEl.textContent = t('freeTime');
     const tick = () => {
       const remain = accessUntil - Date.now();
       countdownEl.textContent = fmt(remain);
       if (remain <= 0) {
         clearInterval(ndIntervalId);
-        statusEl.textContent = 'Serbest zaman doldu.';
+        statusEl.textContent = t('ended');
         countdownEl.textContent = '00:00';
       }
     };
@@ -90,21 +201,20 @@ document.addEventListener('DOMContentLoaded', () => {
     ndIntervalId = setInterval(tick, 1000);
   }
 
-  // İlk açılışta hesapla
   render();
 
-  // accessUntil güncellenince canlı yenile (hem local hem sync’i dinle)
   chrome.storage.onChanged.addListener((changes, area) => {
     if ((area === 'local' && changes.accessUntil) || (area === 'sync' && changes.accessUntil)) {
       render();
     }
   });
+
+  document.addEventListener("nd-lang-changed", render);
 });
 /* ===================== Geri Sayım Sonu ===================== */
 
 /* === ND: Popup canlı sayaç ve istatistikler === */
 document.addEventListener('DOMContentLoaded', () => {
-  // Yardımcılar (bu scope'ta tek kez tanımlı – fonksiyon içinde tekrar tanımlamıyoruz)
   const two = n => String(n).padStart(2,'0');
   const secToMinStr = sec => {
     const m = Math.floor(sec / 60);
@@ -123,22 +233,27 @@ document.addEventListener('DOMContentLoaded', () => {
     return `${yyyy}-${mm}`;
   };
 
-  // --- DOM elemanlarını YÜKLENDİKTEN SONRA al ---
   const liveEl   = document.getElementById('nd-live-counter');
   const todayEl  = document.getElementById('nd-today-total');
   const statsBtn = document.getElementById('nd-stats-btn');
   const panel    = document.getElementById('nd-stats-panel');
   const content  = document.getElementById('nd-stats-content');
+  const liveTitle= document.getElementById('nd-live-title');
 
-  if (!liveEl || !todayEl || !statsBtn || !panel || !content) {
-    // HTML yoksa sessiz çık
-    return;
-  }
+  if (!liveEl || !todayEl || !statsBtn || !panel || !content) return;
 
-  // ---- Canlı sayaç ----
+  document.addEventListener("nd-lang-changed", () => {
+    if (liveTitle) liveTitle.textContent = t("focusLiveTitle");
+    renderTodayTotal();
+    if (panel.style.display === 'block') {
+      chrome.storage.local.get(['dailyTotals','monthlyTotals']).then(res => {
+        renderStatsPanel(res.dailyTotals || {}, res.monthlyTotals || {});
+      });
+    }
+  });
+
   let liveTimer = null;
 
-  // Arka plandan gerçek durumu iste (00:00 kalma sorunu için kritik)
   async function getFocusState() {
     const { focusRunning=false, focusStartedAt=null } = await chrome.storage.local.get(['focusRunning','focusStartedAt']);
     if (!focusRunning || !focusStartedAt) {
@@ -164,45 +279,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function startLiveCounter() {
     if (liveTimer) clearInterval(liveTimer);
-    const st = await getFocusState();       // açılır açılmaz bir kere hesapla
+    const st = await getFocusState();
     renderLive(st.running, st.startedAt);
-    liveTimer = setInterval(async () => {   // sonra her saniye güncelle
+    liveTimer = setInterval(async () => {
       const st2 = await getFocusState();
       renderLive(st2.running, st2.startedAt);
     }, 1000);
   }
 
-  // ---- Bugünün toplamı (oturum bitince artar) ----
   async function renderTodayTotal() {
     const now = new Date();
     const key = dayKeyOf(now);
     const { dailyTotals={} } = await chrome.storage.local.get('dailyTotals');
     const sec = dailyTotals[key]?.focusSecTotal || 0;
-    todayEl.textContent = `Bugünkü Toplam: ${secToMinStr(sec)}`;
+    todayEl.textContent = `${t('todayTotalPrefix')}: ${secToMinStr(sec)}`;
   }
 
-  // ---- İstatistik paneli: Son 7 gün + Bu Hafta + Bu Ay + En çok dağıtanlar ----
   function renderStatsPanel(dailyTotals = {}, monthlyTotals = {}) {
     const now = new Date();
-
-    // Son 7 gün tablosu
     const rows = [];
-    rows.push(`<div style="font-weight:700;margin-bottom:4px;">Son 7 Gün</div>`);
+
+    rows.push(`<div style="font-weight:700;margin-bottom:4px;">${t('last7Days')}</div>`);
     rows.push(`<table style="width:100%; border-collapse:collapse; font-size:12px;">`);
-    rows.push(`<tr><th style="text-align:left;padding:2px 0;">Gün</th><th style="text-align:right;">Süre</th></tr>`);
+    rows.push(`<tr><th style="text-align:left;padding:2px 0;">${t('tableDay')}</th><th style="text-align:right;">${t('tableDuration')}</th></tr>`);
 
     for (let i = 0; i < 7; i++) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
       const dk = dayKeyOf(d);
       const sec = dailyTotals[dk]?.focusSecTotal || 0;
-      rows.push(
-        `<tr><td style="padding:2px 0;">${dk}</td><td style="text-align:right;">${secToMinStr(sec)}</td></tr>`
-      );
+      rows.push(`<tr><td style="padding:2px 0;">${dk}</td><td style="text-align:right;">${secToMinStr(sec)}</td></tr>`);
     }
     rows.push(`</table>`);
 
-    // Bu hafta toplam (son 7 gün)
     let weekTotal = 0;
     for (let i = 0; i < 7; i++) {
       const d = new Date(now);
@@ -210,28 +319,24 @@ document.addEventListener('DOMContentLoaded', () => {
       const dk = dayKeyOf(d);
       weekTotal += (dailyTotals[dk]?.focusSecTotal || 0);
     }
-    rows.push(`<div style="margin-top:8px;"><b>Bu Hafta:</b> ${secToMinStr(weekTotal)}</div>`);
+    rows.push(`<div style="margin-top:8px;"><b>${t('thisWeek')}:</b> ${secToMinStr(weekTotal)}</div>`);
 
-    // Bu ay toplam
     const monthKey = monthKeyOf(now);
     const monthTotal = monthlyTotals?.[monthKey]?.focusSecTotal || 0;
-    rows.push(`<div><b>Bu Ay:</b> ${secToMinStr(monthTotal)}</div>`);
+    rows.push(`<div><b>${t('thisMonth')}:</b> ${secToMinStr(monthTotal)}</div>`);
 
-    // ==== EN ÇOK DİKKATİNİ DAĞITAN (BUGÜN / HAFTA / AY) ====
     function topDomainFromMap(mapObj) {
-      if (!mapObj || typeof mapObj !== 'object') return '-';
+      if (!mapObj || typeof mapObj !== 'object') return t('none');
       let bestKey = null, bestVal = 0;
       for (const [k, v] of Object.entries(mapObj)) {
         if ((v || 0) > bestVal) { bestVal = v || 0; bestKey = k; }
       }
-      return bestKey ? `${bestKey} (${bestVal})` : '-';
+      return bestKey ? `${bestKey} (${bestVal})` : t('none');
     }
 
-    // BUGÜN
     const todayKey = dayKeyOf(now);
     const todayTop = topDomainFromMap((dailyTotals[todayKey] || {}).distractionsByDomain);
 
-    // BU HAFTA (son 7 gün toplanır)
     const weekAgg = {};
     for (let i = 0; i < 7; i++) {
       const d = new Date(now);
@@ -245,18 +350,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const weekTop = topDomainFromMap(weekAgg);
 
-    // BU AY
     const monthTop = topDomainFromMap((monthlyTotals[monthKey] || {}).distractionsByDomain);
 
-    rows.push(`<div style="margin-top:8px; font-weight:700;">En Çok Dikkatini Dağıtan</div>`);
-    rows.push(`<div>Bugün: ${todayTop}</div>`);
-    rows.push(`<div>Bu Hafta: ${weekTop}</div>`);
-    rows.push(`<div>Bu Ay: ${monthTop}</div>`);
+    rows.push(`<div style="margin-top:8px; font-weight:700;">${t('topDistractors')}</div>`);
+    rows.push(`<div>${t('todayLabel')}: ${todayTop}</div>`);
+    rows.push(`<div>${t('weekLabel')}: ${weekTop}</div>`);
+    rows.push(`<div>${t('monthLabel')}: ${monthTop}</div>`);
 
     content.innerHTML = rows.join('');
   }
 
-  // Panel aç/kapa
   statsBtn.addEventListener('click', async () => {
     const open = panel.style.display === 'block';
     if (open) {
@@ -264,17 +367,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     const data = await chrome.storage.local.get(['dailyTotals','monthlyTotals']);
-    // (Opsiyonel cache, ama kullanmasak da sorun değil)
-    window.__ndMonthlyCache = { monthlyTotals: data.monthlyTotals || {} };
     renderStatsPanel(data.dailyTotals || {}, data.monthlyTotals || {});
     panel.style.display = 'block';
   });
 
-  // İlk çizimler (artık DOM hazır)
   startLiveCounter();
   renderTodayTotal();
 
-  // Storage değişince güncelle
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local') {
       if (changes.dailyTotals) renderTodayTotal();
@@ -285,20 +384,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
     }
-    // Switch değişirse de canlı sayacı tekrar değerlendir
     if (area === 'sync' && changes.isActive) startLiveCounter();
   });
 });
 
-
-/* ===================== Bugünkü deneme sayısını göster ===================== */
-/* Arkaplanda (background.js) blur enjekte edildiğinde ndIncTodayAttempts()
-   ile local storage'a gün bazında sayaç yazıyoruz.
-   Burada o değeri okuyup popup'ta gösteriyoruz. */
-
+/* ===================== Bugünkü deneme sayısı ===================== */
 document.addEventListener('DOMContentLoaded', () => {
   const label = document.getElementById('nd-today-count');
-  if (!label) return; // popup.html'de alan yoksa sessiz çık
+  const prefix = document.getElementById('nd-today-prefix');
+  const suffix = document.getElementById('nd-today-suffix');
+  if (!label) return;
+
+  document.addEventListener("nd-lang-changed", () => {
+    if (prefix) prefix.textContent = t('todayPrefix');
+    if (suffix) suffix.textContent = t('todaySuffix');
+  });
 
   function todayKey() {
     const d = new Date();
@@ -315,10 +415,8 @@ document.addEventListener('DOMContentLoaded', () => {
     label.textContent = attempts;
   }
 
-  // İlk yükleme
   renderToday();
 
-  // Aynı gün içinde değer artınca canlı güncelle
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     const key = todayKey();
