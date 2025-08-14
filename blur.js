@@ -58,6 +58,31 @@ if (!document.getElementById("nd-blur-overlay")) {
   const input = modal.querySelector("#nd-reason");
   const button = modal.querySelector("#nd-continue");
 
+  // === EKLE: accessUntil verildiğinde blur'u otomatik kaldır ===
+  // Yardımcı: overlay varsa kaldır
+  function ndRemoveOverlay() {
+    document.getElementById("nd-blur-style")?.remove();
+    document.getElementById("nd-blur-overlay")?.remove();
+  }
+
+  // İlk kontrol: Bu sekmeye script enjekte edildiğinde zaten izin varsa blur göstermeyelim
+  chrome.storage.local.get('accessUntil', ({ accessUntil }) => {
+    if (typeof accessUntil === 'number' && Date.now() < accessUntil) {
+      ndRemoveOverlay();
+    }
+  });
+
+  // Canlı dinleme: accessUntil değiştiği anda (background yazınca) blur'u kaldır
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.accessUntil) return;
+    const newVal = changes.accessUntil.newValue;
+    if (typeof newVal === 'number' && Date.now() < newVal) {
+      ndRemoveOverlay();
+    }
+  });
+  // === EKLE BİTİŞ ===
+
+
   input.addEventListener("input", () => {
     if (input.value.trim().length >= 5) {
       button.disabled = false;
