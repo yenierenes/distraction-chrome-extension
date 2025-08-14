@@ -43,7 +43,8 @@ if (!document.getElementById("nd-blur-overlay")) {
     <h2 style="margin-top:0;">Dikkatin dağıldı!</h2>
     <p>Lütfen bu siteden çık!<br>Devam etmek istiyorsan yanıtla.</p>
     <div style="font-size: 32px; margin: 10px 0;">⬇️</div>
-    <input type="text" id="nd-reason" placeholder="Bu siteye neden girmek istiyorsun?"
+    <input type="text" id="nd-reason" placeholder="Bu siteye neden girmek istiyorsun?" 
+  autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
       style="display: block; margin: 0 auto 10px auto; width: 100%; max-width: 100%; box-sizing: border-box; padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px;">
     <button id="nd-continue" disabled
       style="padding: 10px 20px; font-size: 15px; background: gray; color: white; border: none; border-radius: 8px; cursor: not-allowed;">

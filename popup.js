@@ -104,3 +104,40 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 /* ===================== Geri Sayım Sonu ===================== */
+
+
+/* ===================== Bugünkü deneme sayısını göster (EKLE) ===================== */
+/* Arkaplanda (background.js) blur enjekte edildiğinde ndIncTodayAttempts()
+   ile local storage'a gün bazında sayaç yazıyoruz.
+   Burada o değeri okuyup popup'ta gösteriyoruz. */
+
+document.addEventListener('DOMContentLoaded', () => {
+  const label = document.getElementById('nd-today-count');
+  if (!label) return; // popup.html'de alan yoksa sessiz çık
+
+  function todayKey() {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `nd_stats_${yyyy}-${mm}-${dd}`;
+  }
+
+  async function renderToday() {
+    const key = todayKey();
+    const data = await chrome.storage.local.get(key);
+    const attempts = data[key]?.attempts ?? 0;
+    label.textContent = attempts;
+  }
+
+  // İlk yükleme
+  renderToday();
+
+  // Aynı gün içinde değer artınca canlı güncelle
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    const key = todayKey();
+    if (changes[key]) renderToday();
+  });
+});
+/* ===================== Bugünkü deneme sayısı Son ===================== */

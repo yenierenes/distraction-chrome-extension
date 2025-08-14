@@ -1,6 +1,9 @@
 let distractionLevel = 0;
 let accessUntil = null;
 
+// === Debounce için ek değişken (EKLE) ===
+let ndLastAttempt = {}; // { "tabId|url": timestamp }
+
 // Erişim süresi dolmuş mu? (true = artık izin yok)
 function isAccessExpired() {
   return !accessUntil || Date.now() > accessUntil;
@@ -9,33 +12,45 @@ function isAccessExpired() {
 // Mesajları dinle (görev başarı → AYARDAKİ SÜRE kadar izin ver)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request && request.action === "grantAccess") {
-    // Kullanıcının settings.html'de belirlediği dakika değerini oku (varsayılan 10 dk)
     chrome.storage.sync.get({ accessMinutes: 10 }, ({ accessMinutes }) => {
-      
-      // accessUntil = şu an + (kullanıcı süresi * dakika cinsinden ms)
       accessUntil = Date.now() + accessMinutes * 60 * 1000;
 
-      // 1) SYNC → Blur kontrolün buradan okuyor + cihazlar arası senkronize
       chrome.storage.sync.set({ accessUntil });
-
-      // 2) LOCAL → Popup’taki sayaç buradan okuyor (hızlı, kota sorunu yok)
       chrome.storage.local.set({ accessUntil });
 
-      // 3) Alarm kur → accessUntil süresi dolunca otomatik blur geri gelecek
       chrome.alarms.create('nd-clearAccess', { when: accessUntil });
 
-      // (İsteğe bağlı) Badge ile göster:
-      // chrome.action.setBadgeText({ text: 'ON' });
-      // chrome.action.setBadgeBackgroundColor({ color: '#0b8' });
-
-      // Gönderen tarafa "tamam" cevabı ver
       if (typeof sendResponse === 'function') sendResponse({ ok: true });
     });
-
-    // async sendResponse kullanılacağı için true döndür
     return true;
   }
 });
+
+// === Günlük deneme sayacı ===
+function ndTodayKey() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `nd_stats_${yyyy}-${mm}-${dd}`;
+}
+
+async function ndIncTodayAttempts(tabId, url) {
+  // Debounce kontrolü — aynı sekme+url 3 sn içinde tekrar sayma
+  const now = Date.now();
+  const comboKey = `${tabId}|${url}`;
+  if (ndLastAttempt[comboKey] && (now - ndLastAttempt[comboKey] < 3000)) {
+    return; // çok hızlı tekrar → sayma
+  }
+  ndLastAttempt[comboKey] = now;
+
+  const key = ndTodayKey();
+  const data = await chrome.storage.local.get(key);
+  const val = (data[key]?.attempts ?? 0) + 1;
+  await chrome.storage.local.set({ [key]: { attempts: val } });
+}
+// === Günlük deneme sayacı SON ===
+
 
 // Blur için ortak kontrol fonksiyonu
 function handleBlurInjection(details) {
@@ -44,23 +59,13 @@ function handleBlurInjection(details) {
     const distractingSites = data.customSites || [];
     const now = Date.now();
 
-    // SYNC'ten okunan accessUntil
     accessUntil = data.accessUntil || 0;
-
     if (!isActive) return;
 
     let url;
-    try {
-      url = new URL(details.url);
-    } catch (e) {
-      // Bazı özel URL’ler hata atabilir
-      return;
-    }
+    try { url = new URL(details.url); } catch { return; }
 
-    const matched = distractingSites.some(site =>
-      url.hostname.includes(site)
-    );
-
+    const matched = distractingSites.some(site => url.hostname.includes(site));
     if (!matched) return;
 
     const isExpired = !accessUntil || now > accessUntil;
@@ -72,6 +77,9 @@ function handleBlurInjection(details) {
       });
 
       distractionLevel++;
+
+      // Günlük deneme sayacını arttır (debounce'lu)
+      ndIncTodayAttempts(details.tabId, details.url);
     }
   });
 }
@@ -80,18 +88,14 @@ function handleBlurInjection(details) {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== 'nd-clearAccess') return;
 
-  // accessUntil değerlerini temizle
   await chrome.storage.sync.remove('accessUntil');
   await chrome.storage.local.remove('accessUntil');
 
-  // (İsteğe bağlı) Badge temizle
   chrome.action.setBadgeText({ text: '' });
 
-  // Ayarları al (aktif mi, hangi siteler engelli)
   const { isActive = false, customSites = [] } = await chrome.storage.sync.get({ isActive: false, customSites: [] });
   if (!isActive || !Array.isArray(customSites) || customSites.length === 0) return;
 
-  // Açık sekmeleri kontrol et ve dikkat dağıtan sitelere blur.js enjekte et
   chrome.tabs.query({}, (tabs) => {
     tabs.forEach((tab) => {
       let url;
@@ -105,13 +109,11 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
           target: { tabId: tab.id },
           files: ['blur.js']
         });
-      } catch (e) { /* injection hatasını sessiz geç */ }
+      } catch {}
     });
   });
 });
 
-// Sayfa tamamen yüklendiğinde çalışır
+// Event dinleyiciler
 chrome.webNavigation.onCompleted.addListener(handleBlurInjection);
-
-// SPA (tek sayfa uygulamaları) geçişlerinde çalışır
 chrome.webNavigation.onHistoryStateUpdated.addListener(handleBlurInjection);
