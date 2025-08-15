@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Görev - Dikkatini Topla</title>
+  <title>Task - Focus Up</title>
   <style>
     body {
       font-family: sans-serif;
@@ -14,7 +14,6 @@
       margin: 0;
       background-color: #f4f4f4;
     }
-
     #taskBox {
       background: white;
       padding: 30px;
@@ -22,7 +21,6 @@
       box-shadow: 0 0 30px rgba(0,0,0,0.2);
       text-align: center;
     }
-
     input {
       font-size: 18px;
       padding: 8px;
@@ -30,7 +28,6 @@
       width: 100px;
       text-align: center;
     }
-
     button {
       margin-top: 15px;
       padding: 10px 20px;
@@ -39,73 +36,80 @@
       border-radius: 8px;
       cursor: pointer;
     }
-
-    #submitBtn {
-      background-color: #4CAF50;
-      color: white;
-    }
-
-    #accessBtn {
-      background-color: gray;
-      color: white;
-      margin-top: 20px;
-      cursor: not-allowed;
-    }
-
-    #accessBtn.enabled {
-      background-color: #2196F3;
-      cursor: pointer;
-    }
-
-    #message {
-      margin-top: 10px;
-      color: #333;
-    }
+    #submitBtn { background-color: #4CAF50; color: white; }
+    #accessBtn { background-color: gray; color: white; margin-top: 20px; cursor: not-allowed; }
+    #accessBtn.enabled { background-color: #2196F3; cursor: pointer; }
+    #message { margin-top: 10px; color: #333; }
   </style>
 </head>
 <body>
   <div id="taskBox">
-    <h2>Görev Zamanı!</h2>
+    <h2 id="t-title">Task Time!</h2>
     <p><span id="num1"></span> + <span id="num2"></span> = ?</p>
-    <input type="number" id="answer" placeholder="Cevap">
+    <input type="number" id="answer" placeholder="···">
     <br>
-    <button id="submitBtn">Gönder</button>
+    <button id="submitBtn">Send</button>
     <div id="message"></div>
-    <button id="accessBtn" disabled>Siteye Giriş</button>
+    <button id="accessBtn" disabled>Allow Access</button>
   </div>
 
   <script>
-    const num1 = Math.floor(Math.random() * 90 + 10); // 10-99
-    const num2 = Math.floor(Math.random() * 90 + 10);
-    const result = num1 + num2;
-
-    document.getElementById("num1").textContent = num1;
-    document.getElementById("num2").textContent = num2;
-
-    const answerInput = document.getElementById("answer");
-    const submitBtn = document.getElementById("submitBtn");
-    const accessBtn = document.getElementById("accessBtn");
-    const message = document.getElementById("message");
-
-    submitBtn.addEventListener("click", () => {
-      const userAnswer = parseInt(answerInput.value);
-      if (userAnswer === result) {
-        message.textContent = "✅ Doğru! Şimdi siteye giriş yapabilirsin.";
-        accessBtn.disabled = false;
-        accessBtn.classList.add("enabled");
-        accessBtn.style.cursor = "pointer";
-
-        // 10dk izin zamanını sakla
-        const accessUntil = Date.now() + 10 * 60 * 1000;
-        chrome.storage.sync.set({ accessUntil });
-      } else {
-        message.textContent = "❌ Yanlış cevap, tekrar dene!";
+    // i18n
+    const ND_I18N = {
+      en: {
+        taskTitle: "Task Time!",
+        send: "Send",
+        ok: (m)=>`✅ Correct! You may enter the site for ${m} minutes.`,
+        wrong: "❌ Wrong answer, try again.",
+        allow: "Allow Access"
+      },
+      tr: {
+        taskTitle: "Görev Zamanı!",
+        send: "Gönder",
+        ok: (m)=>`✅ Doğru! ${m} dakika boyunca siteye girebilirsin.`,
+        wrong: "❌ Yanlış cevap, tekrar dene!",
+        allow: "Siteye Giriş"
       }
-    });
+    };
 
-    accessBtn.addEventListener("click", () => {
-      chrome.runtime.sendMessage({ action: "grantAccess" });
-      window.close(); // Bu sekmeyi kapatır
+    // Dil ve süreyi oku
+    chrome.storage.sync.get({ lang: 'en', accessMinutes: 10 }, ({ lang, accessMinutes }) => {
+      const L = (lang === 'tr') ? ND_I18N.tr : ND_I18N.en;
+
+      document.getElementById("t-title").textContent = L.taskTitle;
+      document.getElementById("submitBtn").textContent = L.send;
+      document.getElementById("accessBtn").textContent = L.allow;
+
+      // Basit toplama görevi
+      const num1 = Math.floor(Math.random() * 90 + 10);
+      const num2 = Math.floor(Math.random() * 90 + 10);
+      const result = num1 + num2;
+
+      document.getElementById("num1").textContent = num1;
+      document.getElementById("num2").textContent = num2;
+
+      const answerInput = document.getElementById("answer");
+      const submitBtn = document.getElementById("submitBtn");
+      const accessBtn = document.getElementById("accessBtn");
+      const message = document.getElementById("message");
+
+      submitBtn.addEventListener("click", () => {
+        const userAnswer = parseInt(answerInput.value, 10);
+        if (userAnswer === result) {
+          message.textContent = L.ok(accessMinutes);
+          accessBtn.disabled = false;
+          accessBtn.classList.add("enabled");
+          accessBtn.style.cursor = "pointer";
+        } else {
+          message.textContent = L.wrong;
+        }
+      });
+
+      accessBtn.addEventListener("click", () => {
+        // Süreyi background belirliyor (accessMinutes) — burada sadece izin isteyelim
+        chrome.runtime.sendMessage({ action: "grantAccess" });
+        window.close();
+      });
     });
   </script>
 </body>
