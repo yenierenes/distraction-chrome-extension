@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Not-Distracted",
-  "description": "Dikkat dağıtıcı sitelere erişmeden önce görev tamamlaman gerek!",
+  "description": "A Chrome extension to block distracting websites and help you focus.",
   "version": "1.0",
   "permissions": [
     "storage",
