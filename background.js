@@ -1,17 +1,17 @@
 let distractionLevel = 0;
 let accessUntil = null;
 
-// === Debounce için ek değişken (EKLE) ===
+// === Debounce için ek değişken ===
 let ndLastAttempt = {}; // { "tabId|url": timestamp }
 
-// === ODAK OTURUM SAYACI: RAM durumu ve yardımcılar (EKLE) ===
+// === ODAK OTURUM SAYACI: RAM durumu ===
 let ndSession = {
-  running: false,   // sayaç açık mı?
-  startedAt: null,  // ms cinsinden başlangıç
-  tickTimer: null   // ileride popup canlı sayaç için kullanılabilir
+  running: false,
+  startedAt: null,
+  tickTimer: null
 };
 
-// === ND: Otomatik devam (auto-resume) durumu (EKLE) ===
+// === ND: Otomatik devam (auto-resume) durumu ===
 let ndAutoResume = { waiting: false, tabId: null, host: '' };
 function ndClearAutoResume() {
   ndAutoResume = { waiting: false, tabId: null, host: '' };
@@ -19,11 +19,11 @@ function ndClearAutoResume() {
 async function ndTryResume() {
   const { isActive = false } = await chrome.storage.sync.get('isActive');
   if (!isActive) { ndClearAutoResume(); return; }
-  if (!ndSession.running) ndStartSession();
+  if (!ndSession.running) await ndStartSession(); // hydrate ederek başlatır
   ndClearAutoResume();
 }
 
-// Bugün ve Ay anahtarları (örn. "2025-08-14", "2025-08")
+// === Yardımcı: Gün/Ay anahtarları ===
 function ndDayKey() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -38,43 +38,119 @@ function ndMonthKey() {
   return `${yyyy}-${mm}`;
 }
 
-// Oturumu BAŞLAT (switch açıldığında)
-function ndStartSession() {
-  if (ndSession.running) return; // zaten açık
-  ndSession.running = true;
-  ndSession.startedAt = Date.now();
+/* =========================
+   UYKU/BEKLEME BOŞLUĞU FİX'i (HEARTBEAT)
+   ========================= */
+const ND_BEAT_INTERVAL_MS = 60 * 1000;   // 60 sn'de bir nabız
+const ND_SLEEP_GAP_MS     = 90 * 1000;   // 90 sn'den uzun boşluk → uyku varsay
 
-  // >>> Popup canlı sayaç için state'i yaz
-  chrome.storage.local.set({
-    focusRunning: true,
-    focusStartedAt: ndSession.startedAt
-  });
+function ndScheduleBeat() {
+  // Servis worker uyusa da alarm tekrar ayağa kalktığında çalışır
+  chrome.alarms.create('nd-beat', { periodInMinutes: ND_BEAT_INTERVAL_MS / 60000 });
+}
+async function ndRecordBeat() {
+  if (ndSession.running) {
+    await chrome.storage.local.set({ ndLastBeat: Date.now() });
+  }
+}
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'nd-beat') {
+    ndRecordBeat();
+  }
+});
+
+// 1) Background uyandıysa storage'daki durumu RAM'e geri yükle (+ uyku düzeltme)
+async function ndHydrateSessionFromStorage() {
+  try {
+    const { focusRunning = false, focusStartedAt = null, ndLastBeat = null } =
+      await chrome.storage.local.get(['focusRunning', 'focusStartedAt', 'ndLastBeat']);
+
+    if (focusRunning && typeof focusStartedAt === 'number') {
+      ndSession.running   = true;
+      ndSession.startedAt = focusStartedAt;
+
+      const now = Date.now();
+      if (typeof ndLastBeat === 'number') {
+        const gap = now - ndLastBeat;
+        // Uykuda geçen zamanı sayma: startedAt'i uyku uzunluğu kadar ileri kaydır
+        if (gap > ND_SLEEP_GAP_MS) {
+          ndSession.startedAt = focusStartedAt + gap;
+          // Güvenlik: startedAt şimdiye taşarsa minimum = now - 1sn
+          if (ndSession.startedAt > now - 1000) ndSession.startedAt = now - 1000;
+          await chrome.storage.local.set({ focusStartedAt: ndSession.startedAt });
+        }
+      }
+
+      if (!ndSession.tickTimer) {
+        ndSession.tickTimer = setInterval(() => {}, 1000);
+      }
+      ndScheduleBeat();
+      ndRecordBeat();
+    }
+  } catch { /* sessiz geç */ }
+}
+
+// 2) Oturumu BAŞLAT — varsa varolan startedAt'i kullan
+async function ndStartSession() {
+  if (ndSession.running && ndSession.startedAt) return;
+
+  const { focusRunning = false, focusStartedAt = null } =
+    await chrome.storage.local.get(['focusRunning', 'focusStartedAt']);
+
+  if (focusRunning && typeof focusStartedAt === 'number') {
+    ndSession.running   = true;
+    ndSession.startedAt = focusStartedAt;
+  } else {
+    ndSession.running   = true;
+    ndSession.startedAt = Date.now();
+    await chrome.storage.local.set({
+      focusRunning: true,
+      focusStartedAt: ndSession.startedAt
+    });
+  }
 
   if (!ndSession.tickTimer) {
     ndSession.tickTimer = setInterval(() => {}, 1000);
   }
+  ndScheduleBeat();
+  ndRecordBeat();
 }
 
-// Oturumu BİTİR ve KAYDET (switch kapanınca veya engelli site tetiklenince)
+// 3) Oturumu BİTİR ve KAYDET (yalnızca engelli domainde tetiklenir) — uyku yok sayılır
 async function ndStopSession(breakerDomain = null) {
   if (!ndSession.running || !ndSession.startedAt) return;
 
-  const endedAt = Date.now();
-  const startedAt = ndSession.startedAt;
-  const durationSec = Math.max(1, Math.round((endedAt - startedAt) / 1000));
+  const now = Date.now();
+  const { ndLastBeat = null } = await chrome.storage.local.get('ndLastBeat');
+
+  // Uyku boşluğunu düş: son canlı zaman varsa ve şimdiye çok uzaksa onu esas al
+  let effectiveEnd = now;
+  if (typeof ndLastBeat === 'number') {
+    const gap = now - ndLastBeat;
+    if (gap > ND_SLEEP_GAP_MS) {
+      effectiveEnd = ndLastBeat; // uykuda geçen kısmı dahil etme
+    }
+  }
+
+  let durationMs = Math.max(0, effectiveEnd - ndSession.startedAt);
+  // Aşırı uçları kes (opsiyonel güvenlik)
+  const MAX_SESSION_MS = 8 * 60 * 60 * 1000; // 8 saat
+  if (durationMs > MAX_SESSION_MS) durationMs = MAX_SESSION_MS;
+
+  const durationSec = Math.max(1, Math.round(durationMs / 1000));
 
   // RAM durumunu sıfırla
   ndSession.running = false;
   ndSession.startedAt = null;
   if (ndSession.tickTimer) { clearInterval(ndSession.tickTimer); ndSession.tickTimer = null; }
 
-  // >>> Popup canlı sayaç için state'i kapat
+  // Popup canlı sayaç için state'i kapat
   chrome.storage.local.set({
     focusRunning: false,
     focusStartedAt: null
   });
 
-  // === DÜZELTİLDİ: Tüm istatistik yazımları TEK blokta (çift artma yok) ===
+  // İstatistik yazımı (TEK blok)
   const dayKey = ndDayKey();
   const monthKey = ndMonthKey();
   const store = await chrome.storage.local.get(['focusHistory', 'dailyTotals', 'monthlyTotals']);
@@ -82,14 +158,14 @@ async function ndStopSession(breakerDomain = null) {
   const dailyTotals   = store.dailyTotals   || {};
   const monthlyTotals = store.monthlyTotals || {};
 
-  // 1) focusHistory (günlük oturum listesi)
   if (!Array.isArray(focusHistory[dayKey])) focusHistory[dayKey] = [];
   focusHistory[dayKey].push({
-    startedAt, endedAt, durationSec,
-    breakerDomain: breakerDomain || null // istatistikte kullanıyoruz
+    startedAt: effectiveEnd - durationMs,
+    endedAt:   effectiveEnd,
+    durationSec,
+    breakerDomain: breakerDomain || null
   });
 
-  // 2) Günlük toplamlar + günlük en çok dağıtanlar
   if (!dailyTotals[dayKey]) {
     dailyTotals[dayKey] = { focusSecTotal: 0, sessionCount: 0, distractionsByDomain: {} };
   }
@@ -101,7 +177,6 @@ async function ndStopSession(breakerDomain = null) {
     dailyTotals[dayKey].distractionsByDomain = dMap;
   }
 
-  // 3) Aylık toplamlar + aylık en çok dağıtanlar (TEK YER burası)
   if (!monthlyTotals[monthKey]) {
     monthlyTotals[monthKey] = { focusSecTotal: 0, sessionCount: 0, distractionsByDomain: {} };
   }
@@ -116,25 +191,27 @@ async function ndStopSession(breakerDomain = null) {
   await chrome.storage.local.set({ focusHistory, dailyTotals, monthlyTotals });
 }
 
-// Aktif sekme odak/dikkat durumu kontrolü (YENİ)
+/* =========================
+   Aktif sekme odak/dikkat değerlendirme
+   ========================= */
 async function ndEvaluateActiveTabFocus(tabLike) {
   try {
-    const { isActive = false, customSites = [] } = await chrome.storage.sync.get(['isActive', 'customSites']);
+    await ndHydrateSessionFromStorage();
+
+    const { isActive = false, customSites = [] } =
+      await chrome.storage.sync.get(['isActive', 'customSites']);
     if (!isActive) {
-      // Uygulama kapalıysa sayaç da kapalı kalsın
-      ndStopSession(null);
+      await ndStopSession(null);
       return;
     }
 
-    // Tab bilgisi yoksa aktif olanı çek
     let tab = tabLike;
     if (!tab) {
       const [current] = await chrome.tabs.query({ active: true, currentWindow: true });
       tab = current;
     }
     if (!tab || !tab.url) {
-      // URL yoksa güvenli yaklaşım: odak başlat (boş sayfa vs.)
-      ndStartSession();
+      await ndStartSession();
       return;
     }
 
@@ -144,18 +221,20 @@ async function ndEvaluateActiveTabFocus(tabLike) {
     const isDistracting = Array.isArray(customSites) && customSites.some(site => site && host.includes(site));
 
     if (isDistracting) {
-      // Aktif sekme dikkat dağıtansa odak sayacını durdur
-      ndStopSession(host);
+      await ndStopSession(host);
     } else {
-      // Değilse sayacı başlat/ devam ettir
-      ndStartSession();
+      await ndStartSession();
     }
   } catch (e) {
     // sessiz geç
   }
 }
 
-// Erişim süresi dolmuş mu? (true = artık izin yok)
+/* =========================
+   Serbest erişim ve mesajlar
+   ========================= */
+
+// Erişim süresi dolmuş mu?
 function isAccessExpired() {
   return !accessUntil || Date.now() > accessUntil;
 }
@@ -187,7 +266,6 @@ function ndTodayKey() {
 }
 
 async function ndIncTodayAttempts(tabId, url) {
-  // Debounce kontrolü — aynı sekme+url 3 sn içinde tekrar sayma
   const now = Date.now();
   const comboKey = `${tabId}|${url}`;
   if (ndLastAttempt[comboKey] && (now - ndLastAttempt[comboKey] < 3000)) {
@@ -200,9 +278,8 @@ async function ndIncTodayAttempts(tabId, url) {
   const val = (data[key]?.attempts ?? 0) + 1;
   await chrome.storage.local.set({ [key]: { attempts: val } });
 }
-// === Günlük deneme sayacı SON ===
 
-// Blur için ortak kontrol fonksiyonu
+// Blur için ortak kontrol
 function handleBlurInjection(details) {
   chrome.storage.sync.get(["isActive", "customSites", "accessUntil"], (data) => {
     const isActive = data.isActive ?? false;
@@ -221,27 +298,23 @@ function handleBlurInjection(details) {
     const isExpired = !accessUntil || now > accessUntil;
 
     if (isExpired) {
-      // === ODAK: Engelli site tetiklenmeden hemen önce açık oturumu bitir + auto‑resume bayrağı (EKLE) ===
       let host = '';
       try { host = new URL(details.url).hostname; } catch {}
-      ndStopSession(host); // raporlar için "bozan domain"
-      ndAutoResume = { waiting: true, tabId: details.tabId, host }; // sekmeden çıkınca devam et
+      ndStopSession(host);
+      ndAutoResume = { waiting: true, tabId: details.tabId, host };
 
-      // Mevcut davranış: blur'u enjekte et
       chrome.scripting.executeScript({
         target: { tabId: details.tabId },
         files: ["blur.js"]
       });
 
       distractionLevel++;
-
-      // Günlük deneme sayacını arttır (debounce'lu)
       ndIncTodayAttempts(details.tabId, details.url);
     }
   });
 }
 
-// Süre bittiğinde alarm tetiklenir → erişimi kapat ve açık sekmelere blur uygula
+// Süre bittiğinde alarm: erişimi kapat ve açık sekmelere blur uygula
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== 'nd-clearAccess') return;
 
@@ -250,7 +323,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
   chrome.action.setBadgeText({ text: '' });
 
-  const { isActive = false, customSites = [] } = await chrome.storage.sync.get({ isActive: false, customSites: [] });
+  const { isActive = false, customSites = [] } =
+    await chrome.storage.sync.get({ isActive: false, customSites: [] });
   if (!isActive || !Array.isArray(customSites) || customSites.length === 0) return;
 
   chrome.tabs.query({}, (tabs) => {
@@ -271,35 +345,39 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   });
 });
 
-// === ODAK: Switch değişimini dinle ve oturumu yönet (EKLE) ===
-// popup'taki ana switch isActive değiştiğinde sayaç başlat/durdur
+/* =========================
+   Dinleyiciler
+   ========================= */
+
+// Switch değişimi → başlat/durdur
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync') return;
   if (changes.isActive) {
     const isOn = changes.isActive.newValue;
     if (isOn) {
-      ndStartSession();     // switch AÇILDI → oturum başlar (sayaç akar)
+      ndStartSession();
+      ndEvaluateActiveTabFocus(); // aktif sekmeye göre teyit et
     } else {
-      ndStopSession(null);  // switch KAPANDI → oturum biter (bozan yok)
+      ndStopSession(null);
     }
   }
 });
 
-// Tarayıcı açılış/kurulumda mevcut duruma göre başlat (EKLE)
+// Başlangıçta mevcut duruma göre hydrate + başlat
 chrome.runtime.onStartup?.addListener(async () => {
+  await ndHydrateSessionFromStorage();
   const { isActive = false } = await chrome.storage.sync.get('isActive');
-  if (isActive) ndStartSession();
+  if (isActive) ndEvaluateActiveTabFocus();
 });
 chrome.runtime.onInstalled.addListener(async () => {
+  await ndHydrateSessionFromStorage();
   const { isActive = false } = await chrome.storage.sync.get('isActive');
-  if (isActive) ndStartSession();
+  if (isActive) ndEvaluateActiveTabFocus();
 });
 
-// === ND: Popup için odak durumu cevaplayıcı (EKLE) ===
+// Popup için odak durumu cevaplayıcı
 chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   if (!req) return;
-
-  // Odak oturumu state'ini soran istek
   if (req.action === 'nd-getFocusState') {
     sendResponse({
       running: !!(typeof ndSession !== 'undefined' && ndSession.running),
@@ -308,14 +386,12 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   }
 });
 
-// === ND: Auto-resume tetikleyicileri (EKLE) ===
-// Sekme kapandığında → devam
+// Auto-resume tetikleyicileri
 chrome.tabs.onRemoved.addListener((tabId) => {
   if (ndAutoResume.waiting && ndAutoResume.tabId === tabId) {
     ndTryResume();
   }
 });
-// Sekme yeni URL'e geçtiğinde → engelli domain’den çıkıldıysa devam
 chrome.webNavigation.onCommitted.addListener((details) => {
   if (!ndAutoResume.waiting || ndAutoResume.tabId !== details.tabId) return;
 
@@ -330,7 +406,7 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   });
 });
 
-// Aktif sekme değişince kontrol et (YENİ)
+// Aktif sekme değişince değerlendir
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const tab = await chrome.tabs.get(activeInfo.tabId);
@@ -338,7 +414,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   } catch {}
 });
 
-// Aktif sekmenin URL'i değişince veya yükleme bitince kontrol et (YENİ)
+// Aktif sekmenin URL'i değişince/yükleme bitince değerlendir
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (!tab || !tab.active) return;
   if (changeInfo.status === 'complete' || changeInfo.url) {
@@ -346,24 +422,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-// Uygulama başlarken de bir kere değerlendir (mevcut onStartup/onInstalled yanına)
+// Başlangıçta bir kere daha
 chrome.runtime.onStartup?.addListener(() => ndEvaluateActiveTabFocus());
 chrome.runtime.onInstalled.addListener(() => ndEvaluateActiveTabFocus());
 
-// isActive switch'i değişince de aktif sekmeyi değerlendir (mevcut storage.onChanged içine ek satır)
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'sync') return;
-  if (changes.isActive) {
-    const isOn = changes.isActive.newValue;
-    if (isOn) {
-      // açıldıysa o anki aktif sekmeye göre başlat/durdur
-      ndEvaluateActiveTabFocus();
-    } else {
-      ndStopSession(null);
-    }
-  }
-});
-
-// Event dinleyiciler
+// accessUntil izleme için blur injection
 chrome.webNavigation.onCompleted.addListener(handleBlurInjection);
 chrome.webNavigation.onHistoryStateUpdated.addListener(handleBlurInjection);
