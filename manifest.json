@@ -8,7 +8,7 @@
     "tabs",
     "webNavigation",
     "scripting",
-     "alarms" 
+    "alarms"
   ],
   "host_permissions": [
     "*://*/*"
@@ -27,7 +27,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "videoAd.html",
         "blur.js"
       ],
       "matches": ["<all_urls>"]
